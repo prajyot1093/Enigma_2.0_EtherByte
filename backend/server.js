@@ -4,6 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const connectDB = require("./config/connectDB");
+const notFoundMiddleware = require("./middlewares/notFoundMiddleware");
 const errorMiddleware = require("./middlewares/errorMiddleware");
 
 const app = express();
@@ -28,18 +29,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(uploadsDir));
 
 // ── Routes ──────────────────────────────────────────────────────────────────
+app.use(require("./routes/analysisRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
-app.use("/api/citizen", require("./routes/citizenRoutes"));
-app.use("/api/land", require("./routes/landRoutes"));
-app.use("/api/docs", require("./routes/documentRoutes"));
-app.use("/api/transfer", require("./routes/transferRoutes"));
+app.use("/api", require("./routes/nftRoutes"));
 
 // ── Health check ────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.json({ message: "Land Registry API is running" });
+  res.json({ message: "E-DNA Analysis API is running" });
 });
 
 // ── Global error handler ─────────────────────────────────────────────────────
+app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
 // ── Start server ─────────────────────────────────────────────────────────────

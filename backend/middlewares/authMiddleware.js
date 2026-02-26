@@ -3,7 +3,7 @@ const Admin = require("../models/Admin");
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ success: false, message: "No token provided" });
     }
@@ -17,8 +17,11 @@ const authMiddleware = async (req, res, next) => {
     }
 
     req.admin = admin;
-    next();
+    return next();
   } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ success: false, message: "Token expired" });
+    }
     return res.status(401).json({ success: false, message: "Invalid token" });
   }
 };
