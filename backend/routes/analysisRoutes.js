@@ -24,7 +24,13 @@ router.post(
       .withMessage("sequence length must be 10 to 50000"),
     body("geneName").optional().isString().isLength({ max: 100 }),
     body("description").optional().isString().isLength({ max: 500 }),
-    body("contributorAddress").optional().isEthereumAddress().withMessage("contributorAddress must be a valid wallet address"),
+    body("contributorAddress")
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage("contributorAddress is required")
+      .isEthereumAddress()
+      .withMessage("contributorAddress must be a valid wallet address"),
   ],
   validateMiddleware,
   analyzeSequence

@@ -1,5 +1,10 @@
 const crypto = require("crypto");
 const Analysis = require("../models/Analysis");
+const {
+  isConfigured: isBlockchainConfigured,
+  registerAndRequestAnalysis,
+  hasOracleSourceConfigured,
+} = require("../services/blockchainService");
 
 const VALID_DNA_CHARS = new Set("ATCGNRYSWKMBDHV-");
 
@@ -83,6 +88,13 @@ const analyzeSequence = async (req, res, next) => {
     const startedAt = Date.now();
     const { sequence, geneName, description, contributorAddress } = req.body;
 
+    if (!isBlockchainConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message: "Blockchain service is not configured. Analysis submission is disabled until on-chain anchoring is available.",
+      });
+    }
+
     const normalizedSequence = normalizeSequence(sequence);
     const analysisId = generateAnalysisId(normalizedSequence, geneName);
     const sequenceHash = calculateSequenceHash(normalizedSequence);
@@ -90,6 +102,8 @@ const analyzeSequence = async (req, res, next) => {
     const scoring = scoreSequence(normalizedSequence);
     const readyForMinting = scoring.qualityScore.overallScore >= 60;
     const processingTime = (Date.now() - startedAt) / 1000;
+
+    const normalizedContributor = contributorAddress ? String(contributorAddress).toLowerCase() : null;
 
     const analysis = await Analysis.create({
       analysisId,
@@ -99,7 +113,7 @@ const analyzeSequence = async (req, res, next) => {
       analysisMetadata: {
         geneName: geneName || null,
         description: description || null,
-        contributorAddress: contributorAddress || null,
+        contributorAddress: normalizedContributor,
         sequenceLength: normalizedSequence.length,
       },
       processingTime,
@@ -108,10 +122,32 @@ const analyzeSequence = async (req, res, next) => {
       analyzedAt: new Date(),
     });
 
+    const oracleSourceSet = await hasOracleSourceConfigured();
+    const metadataURI = `ipfs://analysis-${analysisId}`;
+    const chainResult = await registerAndRequestAnalysis({
+      analysisId,
+      sequenceHash,
+      geneName,
+      contributorAddress: normalizedContributor,
+      metadataURI,
+      requestOracle: oracleSourceSet,
+    });
+
+    const blockchain = {
+      enabled: true,
+      anchored: true,
+      requested: oracleSourceSet,
+      ...chainResult,
+      ...(oracleSourceSet ? {} : { reason: "Oracle source code is not configured on contract" }),
+    };
+
     return res.status(201).json({
       success: true,
-      message: "Sequence analyzed successfully",
-      data: analysis,
+      message: "Sequence analyzed and on-chain transaction recorded",
+      data: {
+        analysis,
+        blockchain,
+      },
     });
   } catch (error) {
     return next(error);

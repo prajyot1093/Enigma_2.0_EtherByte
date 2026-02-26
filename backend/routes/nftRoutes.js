@@ -8,7 +8,6 @@ const router = express.Router();
 
 router.post(
   "/mint",
-  authMiddleware,
   [
     body("analysisId").isString().trim().notEmpty().withMessage("analysisId is required"),
     body("contributorAddress").isEthereumAddress().withMessage("contributorAddress must be valid"),

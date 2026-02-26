@@ -2,6 +2,11 @@ const crypto = require("crypto");
 const Analysis = require("../models/Analysis");
 const NftMint = require("../models/NftMint");
 const RewardTransaction = require("../models/RewardTransaction");
+const {
+  isConfigured: isBlockchainConfigured,
+  verifyFromOracle,
+  mintFromAnalysis,
+} = require("../services/blockchainService");
 
 const ANALYSIS_REWARD = 10;
 const MINT_REWARD = 5;
@@ -43,10 +48,30 @@ const mintNft = async (req, res, next) => {
       });
     }
 
-    const qualityBonus = analysis.qualityScore.overallScore >= 80 ? QUALITY_BONUS : 0;
+    let oracleSync = null;
+    let chainMint = null;
+
+    if (isBlockchainConfigured()) {
+      oracleSync = await verifyFromOracle(analysisId);
+
+      if (!oracleSync.verified) {
+        return res.status(409).json({
+          success: false,
+          message: "Oracle result not fulfilled yet. Retry after callback.",
+          data: {
+            oracle: oracleSync.oracleData,
+          },
+        });
+      }
+
+      chainMint = await mintFromAnalysis(analysisId, ipfsMetadataUri || "");
+    }
+
+    const effectiveQuality = oracleSync?.oracleData?.qualityScore ?? analysis.qualityScore.overallScore;
+    const qualityBonus = effectiveQuality >= 80 ? QUALITY_BONUS : 0;
     const totalTokensEarned = ANALYSIS_REWARD + MINT_REWARD + qualityBonus;
 
-    const transactionHash = buildTxHash();
+    const transactionHash = chainMint?.mintTxHash || buildTxHash();
     const analysisRewardTxHash = buildTxHash();
     const mintRewardTxHash = buildTxHash();
 
@@ -54,14 +79,14 @@ const mintNft = async (req, res, next) => {
       analysis: analysis._id,
       analysisId,
       contributorAddress: contributorAddress.toLowerCase(),
-      contractAddress: process.env.NFT_CONTRACT_ADDRESS || null,
-      tokenId: Date.now().toString(),
+      contractAddress: process.env.EDNA_NFT_ADDRESS || process.env.NFT_CONTRACT_ADDRESS || null,
+      tokenId: chainMint?.tokenId ? String(chainMint.tokenId) : Date.now().toString(),
       transactionHash,
       ipfsMetadataUri: ipfsMetadataUri || null,
       ipfsHash: ipfsMetadataUri ? String(ipfsMetadataUri).replace("ipfs://", "") : null,
       chainId: Number(process.env.CHAIN_ID) || 11155111,
       network: process.env.NETWORK_NAME || "sepolia",
-      status: "simulated",
+      status: chainMint ? "success" : "simulated",
       rewards: {
         analysisReward: ANALYSIS_REWARD,
         mintReward: MINT_REWARD,
@@ -118,8 +143,9 @@ const mintNft = async (req, res, next) => {
       message: "NFT minted successfully with rewards",
       data: {
         analysisId,
-        qualityScore: analysis.qualityScore.overallScore,
+        qualityScore: effectiveQuality,
         contributorAddress: contributorAddress.toLowerCase(),
+        oracle: oracleSync,
         rewards: mintRecord.rewards,
         nftDetails: {
           contractAddress: mintRecord.contractAddress,
