@@ -1,0 +1,12 @@
+import { createThirdwebClient } from "thirdweb";
+
+// Replace this with your client ID string
+// refer to https://portal.thirdweb.com/typescript/v5/client on how to get a client ID
+export const clientId =
+  import.meta.env.VITE_TEMPLATE_CLIENT_ID ?? import.meta.env.VITE_CLIENT_ID;
+
+export const client = clientId
+  ? createThirdwebClient({
+      clientId,
+    })
+  : null;
