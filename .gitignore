@@ -1,0 +1,4 @@
+backend/node_modules/
+thirdweb-app/node_modules/
+backend/uploads/
+thirdweb-app/dist/
